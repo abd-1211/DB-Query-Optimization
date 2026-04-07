@@ -16,7 +16,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
-
+#include <mutex>
 #include "common/util/hash_util.h"
 
 namespace bustub {
@@ -29,6 +29,7 @@ class CountMinSketch {
    * @param depth Number of hash functions
    */
   vector <vector <uint32_t>> sketch_;
+  std::mutex mtx_;
   explicit CountMinSketch(uint32_t width, uint32_t depth);
 
   CountMinSketch() = delete;                                            // Default constructor deleted

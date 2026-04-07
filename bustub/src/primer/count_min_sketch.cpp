@@ -57,13 +57,16 @@ auto CountMinSketch<KeyType>::operator=(CountMinSketch &&other) noexcept -> Coun
 
 template <typename KeyType>
 void CountMinSketch<KeyType>::Insert(const KeyType &item) {
-  /** @TODO(student) Implement this function! */
-  // for(size_t i : depth_-1)
-  // {
-  // size_t column =hash_functions_[i](item); //get value of key for ith hashfunction for the item we've selected
-  // sketch[i][column]
-  // }
-}
+  /** @TODO(student) Implement this function! */  
+  
+  std::lock_guard<std::mutex> lock(mtx_); // mutex lock to make it thread safe
+
+  for(size_t i=0; i<depth_;i++) //loop over each hash function
+  {
+  auto column =hash_functions_[i](item) % width_; //get value of key for ith hashfunction for the item we've selected
+  sketch_[i][column]+=1; //keep count of item inserted at index
+  }
+} //mutex automatically unlocked when out of scope
 
 template <typename KeyType>
 void CountMinSketch<KeyType>::Merge(const CountMinSketch<KeyType> &other) {

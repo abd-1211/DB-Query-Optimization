@@ -90,4 +90,6 @@ CountMinSketch(uint32_t width, uint32_t depth) : width_(width), depth_(depth) {
 - Truncates the results to the top `k` entries using `resize()` if there are more than `k` candidates.
 - Returns the final vector of up to `k` `(KeyType, uint32_t)` pairs.
 
+## Debugging
 
+- Edgetest1 failed - Did not check for valid width and depth before assigning sketch_

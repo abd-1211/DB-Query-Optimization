@@ -32,7 +32,10 @@ CountMinSketch<KeyType>::CountMinSketch(uint32_t width, uint32_t depth) : width_
   {
     throw std::invalid_argument("Width and Depth must be greater than 0");
   }
-  sketch_ = std::vector<std::vector<uint32_t>>(depth_, std::vector<uint32_t>(width_));
+  sketch_.reserve(depth_);
+  for (size_t i = 0; i < depth_; i++) {
+  sketch_.emplace_back(width_);
+  }
   /** @spring2026 PLEASE DO NOT MODIFY THE FOLLOWING */
   // Initialize seeded hash functions
   hash_functions_.reserve(depth_);
@@ -42,7 +45,18 @@ CountMinSketch<KeyType>::CountMinSketch(uint32_t width, uint32_t depth) : width_
 }
 
 template <typename KeyType>
-CountMinSketch<KeyType>::CountMinSketch(CountMinSketch &&other) noexcept : width_(other.width_), depth_(other.depth_), sketch_(std::move(other.sketch_)),hash_functions_(std::move(other.hash_functions_)) {
+CountMinSketch<KeyType>::CountMinSketch(CountMinSketch &&other) noexcept : width_(other.width_), depth_(other.depth_) {
+  sketch_.reserve(depth_);
+  for (size_t i = 0; i < depth_; i++) {
+    sketch_.emplace_back(width_);  // construct each row in-place
+    for (size_t j = 0; j < width_; j++)
+      sketch_[i][j].store(other.sketch_[i][j].load(std::memory_order_relaxed));
+  }
+
+  hash_functions_.reserve(depth_);
+  for (size_t i = 0; i < depth_; i++) {
+    hash_functions_.push_back(this->HashFunction(i));
+  }
   //moved resource ownership to new obj
 }
 
@@ -53,8 +67,19 @@ auto CountMinSketch<KeyType>::operator=(CountMinSketch &&other) noexcept -> Coun
   {
   this->width_ = other.width_;
   this->depth_ = other.depth_;
-  this->hash_functions_=std::move(other.hash_functions_);
-  this->sketch_ = std::move(other.sketch_);
+  sketch_.clear();
+    sketch_.reserve(depth_);
+    for (size_t i = 0; i < depth_; i++) {
+      sketch_.emplace_back(width_);
+      for (size_t j = 0; j < width_; j++)
+        sketch_[i][j].store(other.sketch_[i][j].load(std::memory_order_relaxed));
+    }
+    
+    hash_functions_.clear();
+    hash_functions_.reserve(depth_);
+    for (size_t i = 0; i < depth_; i++) {
+      hash_functions_.push_back(this->HashFunction(i));
+    }
   }
   return *this;
   
@@ -63,15 +88,13 @@ auto CountMinSketch<KeyType>::operator=(CountMinSketch &&other) noexcept -> Coun
 template <typename KeyType>
 void CountMinSketch<KeyType>::Insert(const KeyType &item) {
   /** @TODO(student) Implement this function! */  
-  
-  std::lock_guard<std::mutex> lock(mtx_); // mutex lock to make it thread safe
 
   for(size_t i=0; i<depth_;i++) //loop over each hash function
   {
   auto column =hash_functions_[i](item) % width_; //get value of key for ith hashfunction for the item we've selected
-  sketch_[i][column]+=1; //keep count of item inserted at index
+  sketch_[i][column].fetch_add(1, std::memory_order_relaxed); //keep count of item inserted at index
   }
-} //mutex automatically unlocked when out of scope
+} 
 
 template <typename KeyType>
 void CountMinSketch<KeyType>::Merge(const CountMinSketch<KeyType> &other) {
@@ -81,18 +104,19 @@ void CountMinSketch<KeyType>::Merge(const CountMinSketch<KeyType> &other) {
   /** @TODO(student) Implement this function! */
   for (size_t i = 0; i < depth_; i++) {
         for (size_t j = 0; j < width_; j++) {
-            sketch_[i][j] += other.sketch_[i][j];
+            sketch_[i][j].fetch_add(other.sketch_[i][j].load(std::memory_order_relaxed),std::memory_order_relaxed);
         }
       }
 }
 
 template <typename KeyType>
 auto CountMinSketch<KeyType>::Count(const KeyType &item) const -> uint32_t {
+  
   uint32_t min_count = UINT32_MAX;
 
   for (size_t i = 0; i < depth_; i++) {
       auto column = hash_functions_[i](item) % width_;
-      min_count = std::min(min_count, sketch_[i][column]);
+      min_count = std::min(min_count, sketch_[i][column].load(std::memory_order_relaxed));
   }
 
   return min_count;
@@ -101,11 +125,13 @@ auto CountMinSketch<KeyType>::Count(const KeyType &item) const -> uint32_t {
 template <typename KeyType>
 void CountMinSketch<KeyType>::Clear() {
   /** @TODO(student) Implement this function! */
-  for (size_t i = 0; i < depth_; i++) {
-    for (size_t j = 0; j < width_; j++) {
-      sketch_[i][j] = 0;
+  for (auto &row : sketch_){
+    for (auto &cell : row){
+      cell.store(0, std::memory_order_relaxed);
     }
   }
+    
+  
 }
 
 template <typename KeyType>

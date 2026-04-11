@@ -173,3 +173,31 @@ vector<int> v;
 ```cpp
 ranges::sort(v);  // new sort function introduced in C++20
 ```
+
+## 4) Errors!
+
+### Exceptions
+ some common exceptions include:
+ - out_of_range
+ - runtime_error
+ catch and throw them as such
+ 
+```cpp
+catch(runtime_error& e)
+{
+  cerr<< "runtime error: "<<e.what() << '\n';
+  return 1;
+}
+```
+**cerr and cout do basically the same thing**
+
+catch(exception& e) can be used to catch any exception whatsoever
+
+## Debugging
+some tips:
+- Think about debugging before starting coding
+- comment well
+- make the code readable
+- purpose of programe
+- how to report errors
+- Use libraries rather than own code when possible

@@ -58,6 +58,11 @@ CountMinSketch<KeyType>::CountMinSketch(CountMinSketch &&other) noexcept : width
     hash_functions_.push_back(this->HashFunction(i));
   }
   //moved resource ownership to new obj
+  other.sketch_.clear();
+  other.hash_functions_.clear();
+  other.width_ = 0;
+  other.depth_ = 0;
+  //Nullify the source so stale values are not usable after object has been moved
 }
 
 template <typename KeyType>
@@ -80,6 +85,12 @@ auto CountMinSketch<KeyType>::operator=(CountMinSketch &&other) noexcept -> Coun
     for (size_t i = 0; i < depth_; i++) {
       hash_functions_.push_back(this->HashFunction(i));
     }
+
+    // Nullify the source
+    other.sketch_.clear();
+    other.hash_functions_.clear();
+    other.width_ = 0;
+    other.depth_ = 0;
   }
   return *this;
   

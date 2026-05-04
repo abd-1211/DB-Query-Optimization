@@ -75,9 +75,9 @@ auto ArcReplacer::Evict() -> std::optional<frame_id_t> { return std::nullopt; }
  * @param access_type type of access that was received. This parameter is only needed for
  * leaderboard tests.
  */
-void ArcReplacer::RecordAccess(frame_id_t frame_id, page_id_t page_id, [[maybe_unused]] AccessType access_type) {}
+void ArcReplacer::RecordAccess(frame_id_t frame_id, page_id_t page_id, [[maybe_unused]] AccessType access_type) {
 
-/**
+/** 
  * TODO(P1): Add implementation
  *
  * @brief Toggle whether a frame is evictable or non-evictable. This function also
@@ -94,6 +94,132 @@ void ArcReplacer::RecordAccess(frame_id_t frame_id, page_id_t page_id, [[maybe_u
  * @param frame_id id of frame whose 'evictable' status will be modified
  * @param set_evictable whether the given frame is evictable or not
  */
+
+if(alive_map_.count(frame_id)) // if present in mfu or mru logic
+{
+    auto obj = alive_map_[frame_id];
+    if(obj->arc_status_ == ArcStatus::MRU) //in mru
+    {
+        mru_.erase(obj->list_it_); //find by iterator which knows exactly where its located and erase it
+        mfu_.push_front(frame_id);
+        
+        obj->arc_status_ = ArcStatus::MFU;
+        obj->list_it_ = mfu_.begin(); // make iterator point to the element just inserted
+    }
+    else if(obj->arc_status_ == ArcStatus::MFU) // in mfu
+    {
+        mfu_.erase(obj->list_it_); //same as before
+        mfu_.push_front(frame_id);
+
+        obj->list_it_ = mfu_.begin(); // same as before
+    }
+}
+else{ //if not present in mfu or mru
+    if(ghost_map_.count(page_id)) // if present in ghost mfu or mru
+    {
+        auto obj = ghost_map_[page_id];
+        if(obj->arc_status_== ArcStatus::MRU_GHOST) // in mru ghost
+        {
+            if(mru_ghost_.size()>=mfu_ghost_.size() )
+            {
+                mru_target_size_ = std::min(++mru_target_size_,replacer_size_); // target size should not be lower than replacer size
+                mru_ghost_.erase(obj->list_it_); //remove page using iterator
+                mfu_.push_front(frame_id);
+                obj->list_it_=mfu_.begin(); // update element location
+                obj->arc_status_ = ArcStatus::MFU;
+                alive_map_[frame_id] = obj; //transfer element to alive map
+                ghost_map_.erase(page_id); //delete element from ghost map
+            }
+            else
+            {
+                int x=0;
+            if(mru_ghost_.size()!=0)
+            {
+               x= mfu_ghost_.size()/mru_ghost_.size();
+            }
+               mru_target_size_ = std::min(mru_target_size_ + x , replacer_size_); // if replacer is smaller than mru target
+               mru_ghost_.erase(obj->list_it_); // same as before
+               mfu_.push_front(frame_id);
+               obj->list_it_ = mfu_.begin(); // same as before
+               obj->arc_status_ = ArcStatus::MFU;
+                alive_map_[frame_id] = obj; //transfer element to alive map
+                ghost_map_.erase(page_id); //delete element from ghost map
+
+            }
+        }
+        else if(obj->arc_status_==ArcStatus::MFU_GHOST) // in mfu ghost
+        {
+           
+            if(mfu_ghost_.size()>=mru_ghost_.size())
+            {
+                mru_target_size_= std::max(--mru_target_size_ , size_t {0});
+                mfu_ghost_.erase(obj->list_it_); //same
+                mfu_.push_front(frame_id);
+                obj->list_it_ = mfu_.begin(); //same
+                obj->arc_status_ = ArcStatus::MFU;
+                alive_map_[frame_id] = obj; //transfer element to alive map
+                ghost_map_.erase(page_id); //delete element from ghost map
+            }
+            else
+            {
+                int x=0;
+                if(mfu_ghost_.size()!=0)
+                {
+                 x= mru_ghost_.size()/mfu_ghost_.size();
+                 if(mru_ghost_.size()>=x)
+                 {
+                    mru_target_size_= mru_target_size_-x;
+                 }
+                 else
+                 {
+                    mru_target_size_=0;
+                 }
+                 
+                }
+                mfu_ghost_.erase(obj->list_it_); //same
+                mfu_.push_front(frame_id);
+                obj->arc_status_ = ArcStatus::MFU; //same
+                obj->list_it_ = mfu_.begin();
+                alive_map_[frame_id] = obj; //transfer element to alive map
+                ghost_map_.erase(page_id); //delete element from ghost map
+                
+            }       
+           
+        }
+
+    } 
+    else // if not present anywhere
+    {
+      if(mru_.size() +mru_ghost_.size() == replacer_size_) //mru + mrughost = replacer
+      {
+        ghost_map_.erase(mru_ghost_.back());
+        mru_ghost_.pop_back();
+        mru_.push_front(frame_id);
+        auto obj = std::make_shared<FrameStatus>(page_id,frame_id,false,ArcStatus::MRU, mru_.begin()); // make obj with same struct as the alive map to store
+        alive_map_[frame_id]=obj;
+      }
+      else if (mru_.size() + mru_ghost_.size() < replacer_size_) // mru + mrughost < replacer
+      {
+        if(mru_.size() + mru_ghost_.size() + mfu_.size() + mfu_ghost_.size() == 2*replacer_size_)
+        {
+            ghost_map_.erase(mfu_ghost_.back());
+            mfu_ghost_.pop_back();
+            mru_.push_front(frame_id);
+            auto obj = std::make_shared<FrameStatus>(page_id,frame_id,false,ArcStatus::MRU, mru_.begin()); // make obj with same struct as the alive map to store
+            alive_map_[frame_id]=obj;
+        }
+        else
+        {
+            mru_.push_front(frame_id);
+            auto obj = std::make_shared<FrameStatus>(page_id,frame_id,false,ArcStatus::MRU, mru_.begin()); // make obj with same struct as the alive map to store
+            alive_map_[frame_id]=obj;
+        }
+      }     
+    }
+}
+
+
+}
 void ArcReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {}
 
 /**

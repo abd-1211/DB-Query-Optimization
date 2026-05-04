@@ -77,24 +77,6 @@ auto ArcReplacer::Evict() -> std::optional<frame_id_t> { return std::nullopt; }
  */
 void ArcReplacer::RecordAccess(frame_id_t frame_id, page_id_t page_id, [[maybe_unused]] AccessType access_type) {
 
-/** 
- * TODO(P1): Add implementation
- *
- * @brief Toggle whether a frame is evictable or non-evictable. This function also
- * controls replacer's size. Note that size is equal to number of evictable entries.
- *
- * If a frame was previously evictable and is to be set to non-evictable, then size should
- * decrement. If a frame was previously non-evictable and is to be set to evictable,
- * then size should increment.
- *
- * If frame id is invalid, throw an exception or abort the process.
- *
- * For other scenarios, this function should terminate without modifying anything.
- *
- * @param frame_id id of frame whose 'evictable' status will be modified
- * @param set_evictable whether the given frame is evictable or not
- */
-
 if(alive_map_.count(frame_id)) // if present in mfu or mru logic
 {
     auto obj = alive_map_[frame_id];
@@ -220,7 +202,49 @@ else{ //if not present in mfu or mru
 
 
 }
-void ArcReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {}
+
+/** 
+ * TODO(P1): Add implementation
+ *
+ * @brief Toggle whether a frame is evictable or non-evictable. This function also
+ * controls replacer's size. Note that size is equal to number of evictable entries.
+ *
+ * If a frame was previously evictable and is to be set to non-evictable, then size should
+ * decrement. If a frame was previously non-evictable and is to be set to evictable,
+ * then size should increment.
+ *
+ * If frame id is invalid, throw an exception or abort the process.
+ *
+ * For other scenarios, this function should terminate without modifying anything.
+ *
+ * @param frame_id id of frame whose 'evictable' status will be modified
+ * @param set_evictable whether the given frame is evictable or not
+ */
+void ArcReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
+    if(frame_id<0 || frame_id >= int{replacer_size_}) // as given in config.h as invalid state
+    {
+        throw std::invalid_argument("Invalid frame_id"); // throw exception if frame id invalid
+    }
+    if(alive_map_.count(frame_id)) // check if the frame exists
+    {
+        auto obj = alive_map_[frame_id];
+        if( obj->evictable_== 0 && set_evictable == true) // if not evictable and want to set to evictable
+        {
+            curr_size_++; //current size represents current no of evictable frames
+            obj->evictable_ = 1;
+        }
+        else if(obj->evictable_ == 1 && set_evictable == false) // if evictable and want to set to not evictable
+        {
+            curr_size_--;
+            obj->evictable_= 0;
+        }
+    }
+    // for every other case just return
+    //evictable and want to set to evictable
+    //not evictable and want to set to not evictable
+
+
+}
 
 /**
  * TODO(P1): Add implementation
@@ -238,7 +262,38 @@ void ArcReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {}
  *
  * @param frame_id id of frame to be removed
  */
-void ArcReplacer::Remove(frame_id_t frame_id) {}
+void ArcReplacer::Remove(frame_id_t frame_id) {
+    if(alive_map_.count(frame_id)) // if specified frame is found
+    {
+        auto obj = alive_map_[frame_id];
+        if(obj->evictable_ == 0) // if frame is not evictable
+        {
+            throw std::invalid_argument("Frame not evictable");
+        }
+        else // if frame is evictable
+        { 
+            if(obj->arc_status_ == ArcStatus::MFU) // if in mfu
+            {            
+            mfu_.erase(obj->list_it_); // object selected through iterator and then obj is removed
+            alive_map_.erase(frame_id);
+            curr_size_--;
+            }
+            else if (obj->arc_status_ == ArcStatus::MRU) // if in mru
+            {
+                mru_.erase(obj->list_it_); // object selected through iterator and then obj is removed
+                alive_map_.erase(frame_id);
+                curr_size_--;
+            }
+            else{ // if not in mfu or mru
+                // do nothing
+            }
+            
+            
+        }
+    }
+    else // if specified frame is not found
+    return;
+}
 
 /**
  * TODO(P1): Add implementation
@@ -247,6 +302,6 @@ void ArcReplacer::Remove(frame_id_t frame_id) {}
  *
  * @return size_t
  */
-auto ArcReplacer::Size() -> size_t { return 0; }
+auto ArcReplacer::Size() -> size_t { return curr_size_; } // return evictable frames
 
 }  // namespace bustub

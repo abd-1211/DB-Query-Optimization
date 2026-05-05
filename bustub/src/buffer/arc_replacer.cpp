@@ -44,7 +44,78 @@ ArcReplacer::ArcReplacer(size_t num_frames) : replacer_size_(num_frames) {}
  *
  * @return frame id of the evicted frame, or std::nullopt if cannot evict
  */
-auto ArcReplacer::Evict() -> std::optional<frame_id_t> { return std::nullopt; }
+auto ArcReplacer::Evict() -> std::optional<frame_id_t> {
+    auto ArcReplacer::Evict() -> std::optional<frame_id_t> {
+    if (curr_size_ == 0) {
+        return std::nullopt;
+    }
+
+    if (mru_.size() >= mru_target_size_) {
+        // try mru first
+        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) {
+            if (alive_map_[*it]->evictable_) {
+                frame_id_t fid = *it;
+                auto obj = alive_map_[fid];
+                mru_.erase(std::next(it).base());
+                mru_ghost_.push_front(obj->page_id_);
+                obj->arc_status_ = ArcStatus::MRU_GHOST;
+                obj->list_it_ = mru_ghost_.begin();
+                ghost_map_[obj->page_id_] = obj;
+                alive_map_.erase(fid);
+                curr_size_--;
+                return fid;
+            }
+        }
+        // mru all pinned, fallback to mfi
+        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) {
+            if (alive_map_[*it]->evictable_) {
+                frame_id_t fid = *it;
+                auto obj = alive_map_[fid];
+                mfu_.erase(std::next(it).base());
+                mfu_ghost_.push_front(obj->page_id_);
+                obj->arc_status_ = ArcStatus::MFU_GHOST;
+                obj->list_it_ = mfu_ghost_.begin();
+                ghost_map_[obj->page_id_] = obj;
+                alive_map_.erase(fid);
+                curr_size_--;
+                return fid;
+            }
+        }
+    } else {
+        // try mfu first
+        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) {
+            if (alive_map_[*it]->evictable_) {
+                frame_id_t fid = *it;
+                auto obj = alive_map_[fid];
+                mfu_.erase(std::next(it).base());
+                mfu_ghost_.push_front(obj->page_id_);
+                obj->arc_status_ = ArcStatus::MFU_GHOST;
+                obj->list_it_ = mfu_ghost_.begin();
+                ghost_map_[obj->page_id_] = obj;
+                alive_map_.erase(fid);
+                curr_size_--;
+                return fid;
+            }
+        }
+        // MFU all pinned, fallback to MRU
+        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) {
+            if (alive_map_[*it]->evictable_) {
+                frame_id_t fid = *it;
+                auto obj = alive_map_[fid];
+                mru_.erase(std::next(it).base());
+                mru_ghost_.push_front(obj->page_id_);
+                obj->arc_status_ = ArcStatus::MRU_GHOST;
+                obj->list_it_ = mru_ghost_.begin();
+                ghost_map_[obj->page_id_] = obj;
+                alive_map_.erase(fid);
+                curr_size_--;
+                return fid;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
 
 /**
  * TODO(P1): Add implementation

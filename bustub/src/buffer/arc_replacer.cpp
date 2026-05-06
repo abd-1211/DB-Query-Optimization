@@ -45,70 +45,70 @@ ArcReplacer::ArcReplacer(size_t num_frames) : replacer_size_(num_frames) {}
  * @return frame id of the evicted frame, or std::nullopt if cannot evict
  */
 auto ArcReplacer::Evict() -> std::optional<frame_id_t> {
-    auto ArcReplacer::Evict() -> std::optional<frame_id_t> {
+    
     if (curr_size_ == 0) {
         return std::nullopt;
     }
 
     if (mru_.size() >= mru_target_size_) {
         // try mru first
-        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) {
-            if (alive_map_[*it]->evictable_) {
-                frame_id_t fid = *it;
+        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) { //rbegin is reverse iterator starting at last element and rend is reverse iterator staring at first element
+            if (alive_map_[*it]->evictable_) { //check if evictable
+                frame_id_t fid = *it; //derefence the iterator to get fid
                 auto obj = alive_map_[fid];
-                mru_.erase(std::next(it).base());
+                mru_.erase(std::next(it).base()); // cant use erase directly on reverse iterator so convert it to normal first then erase
                 mru_ghost_.push_front(obj->page_id_);
                 obj->arc_status_ = ArcStatus::MRU_GHOST;
-                obj->list_it_ = mru_ghost_.begin();
+                obj->list_it_ = mru_ghost_.begin(); // bring iterator to correct position
                 ghost_map_[obj->page_id_] = obj;
-                alive_map_.erase(fid);
-                curr_size_--;
+                alive_map_.erase(fid); // remove from alive map
+                curr_size_--; // no of evictable frames decrement as space has freed up
                 return fid;
             }
         }
-        // mru all pinned, fallback to mfi
-        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) {
-            if (alive_map_[*it]->evictable_) {
-                frame_id_t fid = *it;
+        // mru all pinned, fallback to mfu
+        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) { //rbegin is reverse iterator starting at last element and rend is reverse iterator staring at first element
+            if (alive_map_[*it]->evictable_) { //check if evictable
+                frame_id_t fid = *it; //derefence the iterator to get fid
                 auto obj = alive_map_[fid];
-                mfu_.erase(std::next(it).base());
+                mfu_.erase(std::next(it).base()); // cant use erase directly on reverse iterator so convert it to normal first then erase
                 mfu_ghost_.push_front(obj->page_id_);
                 obj->arc_status_ = ArcStatus::MFU_GHOST;
-                obj->list_it_ = mfu_ghost_.begin();
+                obj->list_it_ = mfu_ghost_.begin(); // bring iterator to correct position
                 ghost_map_[obj->page_id_] = obj;
-                alive_map_.erase(fid);
-                curr_size_--;
+                alive_map_.erase(fid); // remove from alive map
+                curr_size_--; // no of evictable frames decrement as space has freed up
                 return fid;
             }
         }
     } else {
         // try mfu first
-        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) {
-            if (alive_map_[*it]->evictable_) {
-                frame_id_t fid = *it;
+        for (auto it = mfu_.rbegin(); it != mfu_.rend(); ++it) { //rbegin is reverse iterator starting at last element and rend is reverse iterator staring at first element
+            if (alive_map_[*it]->evictable_) { //check if evictable
+                frame_id_t fid = *it; //derefence the iterator to get fid
                 auto obj = alive_map_[fid];
-                mfu_.erase(std::next(it).base());
+                mfu_.erase(std::next(it).base()); //same as before
                 mfu_ghost_.push_front(obj->page_id_);
                 obj->arc_status_ = ArcStatus::MFU_GHOST;
-                obj->list_it_ = mfu_ghost_.begin();
+                obj->list_it_ = mfu_ghost_.begin(); //same as before
                 ghost_map_[obj->page_id_] = obj;
-                alive_map_.erase(fid);
-                curr_size_--;
+                alive_map_.erase(fid);  // same as before
+                curr_size_--; //same as before
                 return fid;
             }
         }
         // MFU all pinned, fallback to MRU
-        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) {
-            if (alive_map_[*it]->evictable_) {
-                frame_id_t fid = *it;
-                auto obj = alive_map_[fid];
-                mru_.erase(std::next(it).base());
+        for (auto it = mru_.rbegin(); it != mru_.rend(); ++it) { //rbegin is reverse iterator starting at last element and rend is reverse iterator staring at first element
+            if (alive_map_[*it]->evictable_) { //check if evictable
+                frame_id_t fid = *it; //same as before
+                auto obj = alive_map_[fid]; 
+                mru_.erase(std::next(it).base()); //same as before
                 mru_ghost_.push_front(obj->page_id_);
                 obj->arc_status_ = ArcStatus::MRU_GHOST;
-                obj->list_it_ = mru_ghost_.begin();
+                obj->list_it_ = mru_ghost_.begin(); //same as before
                 ghost_map_[obj->page_id_] = obj;
-                alive_map_.erase(fid);
-                curr_size_--;
+                alive_map_.erase(fid);  // same as before
+                curr_size_--;  // same as before
                 return fid;
             }
         }

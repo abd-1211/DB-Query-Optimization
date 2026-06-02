@@ -30,8 +30,6 @@ ArcReplacer::ArcReplacer(size_t num_frames) : replacer_size_(num_frames) {
 }
 
 /**
- * TODO(P1): Add implementation
- *
  * @brief Performs the Replace operation as described by the writeup
  * that evicts from either mfu_ or mru_ into its corresponding ghost list
  * according to balancing policy.

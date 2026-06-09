@@ -56,22 +56,22 @@ void DiskScheduler::Schedule(std::vector<DiskRequest> &requests) {
 void DiskScheduler::StartWorkerThread() {
   while(true)
   {
-    auto req = request_queue_.Get();
-      if(!req.has_value())
+    auto req = request_queue_.Get(); // get 1 request from the scheduled requests using FIFO
+      if(!req.has_value()) // if no more requests break loop destructor puts null output
       {
         break;
       }
-      else
+      else //if requests exist
       {
-        if(req->is_write_)
+        if(req->is_write_) //write reqs
         {
           disk_manager_->WritePage(req->page_id_,req->data_);
         }
-        else
+        else // read reqs
         {
           disk_manager_->ReadPage(req->page_id_,req->data_);
         }
-        req->callback_.set_value(true);
+        req->callback_.set_value(true); // signal to the request issuer that the req has been completed
       }
   }
 }

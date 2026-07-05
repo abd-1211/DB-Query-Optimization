@@ -35,7 +35,20 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  * @return Returns true if this B+ tree has no keys and values.
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { UNIMPLEMENTED("TODO(P2): Add implementation."); }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool { 
+  //UNIMPLEMENTED("TODO(P2): Add implementation."); 
+  ReadPageGuard guard = bpm_->ReadPage(header_page_id_); // acquire a read lock on the current B+ tree header.
+  auto header_page = guard.As<BPlusTreeHeaderPage>(); // convert the raw bytes from the guard to a read only bplustreeheader type object
+  auto root_id = header_page->root_page_id_;// get the id of the root page to check wether its valid or not (exists or not)
+  if(root_id == INVALID_PAGE_ID )
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
 
 /*****************************************************************************
  * SEARCH
@@ -51,9 +64,47 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool { UNIMPLEMENTED("TODO(P2): Add impl
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result) -> bool {
-  UNIMPLEMENTED("TODO(P2): Add implementation.");
+  //UNIMPLEMENTED("TODO(P2): Add implementation.");
   // Declaration of context instance. Using the Context is not necessary but advised.
   Context ctx;
+  ReadPageGuard header_guard = bpm_->ReadPage(header_page_id_);
+  auto header_pg = header_guard.As<BPlusTreeHeaderPage>();
+  auto header_root_id = header_pg->root_page_id_;
+  if(header_root_id == INVALID_PAGE_ID) // check if tree even exists
+  {
+    return false;
+  }
+  
+  ReadPageGuard curr_guard = bpm_->ReadPage(header_root_id);
+  auto curr_page = curr_guard.As<BPlusTreePage>();
+  while(!curr_page->IsLeafPage())
+  {
+    auto internal = curr_guard.As<BPlusTreeInternalPage>();
+    for(int i=0;i<curr_page->max_size_;i++)
+    {
+      int hi = curr_page->GetSize(),lo = 1;
+      int mid = lo + (hi-lo)/2;
+      while(lo<hi)
+      {
+        auto comp = comparator_(internal->KeyAt(mid),key);
+        if(comp > 0) // if key is smaller than the key at current mid
+        {
+          hi = mid-1;
+          mid = lo + (hi-lo)/2;
+        }
+        else if (comp <= 0) // if key is smaller than or equal to the key at current mid
+        {
+          lo = mid+1;
+          mid = lo + (hi-lo)/2;
+        }
+        else
+        {
+          lo = hi
+        }
+      }
+    }
+  }
+  
 }
 
 /*****************************************************************************
@@ -72,10 +123,12 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
-  UNIMPLEMENTED("TODO(P2): Add implementation.");
+  //UNIMPLEMENTED("TODO(P2): Add implementation.");
   // Declaration of context instance. Using the Context is not necessary but advised.
   Context ctx;
+  
 }
+
 
 /*****************************************************************************
  * REMOVE

@@ -95,6 +95,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   KeyType key_array_[INTERNAL_PAGE_SLOT_CNT];
   ValueType page_id_array_[INTERNAL_PAGE_SLOT_CNT];
   // (Spring 2025) Feel free to add more fields and helper functions below if needed
+  void SetValueAt(int index, const ValueType &value); // sets the value of a key at a given index
 };
 
 }  // namespace bustub

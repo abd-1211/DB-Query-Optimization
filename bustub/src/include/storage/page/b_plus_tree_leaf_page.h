@@ -118,6 +118,9 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   KeyType key_array_[LEAF_PAGE_SLOT_CNT];
   ValueType rid_array_[LEAF_PAGE_SLOT_CNT];
   // (Spring 2025) Feel free to add more fields and helper functions below if needed
+  void SetKeyAt(int index, const KeyType &key); // to set the location of a key
+  auto ValueAt(int index) const -> ValueType; // to get the value of a key at an index
+  void SetValueAt(int index, const ValueType &value); // to set the value of a key at a given index
 };
 
 }  // namespace bustub

@@ -76,6 +76,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key); // to set the location of a key
   auto ValueAt(int index) const -> ValueType; // to get the value of a key at an index
   void SetValueAt(int index, const ValueType &value); // to set the value of a key at a given index
+  auto GetMinSize() const -> int { return GetMaxSize() / 2; }
   /**
    * @brief for test only return a string representing all keys in
    * this leaf page formatted as "(tombkey1, tombkey2, ...|key1,key2,key3,...)"

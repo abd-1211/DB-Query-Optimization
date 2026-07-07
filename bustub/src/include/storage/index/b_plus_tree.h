@@ -118,6 +118,8 @@ class BPlusTree {
 
   void BatchOpsFromFile(const std::filesystem::path &file_name);
 
+  void RemoveFromParent(Context &ctx, page_id_t node_id, WritePageGuard node_guard); // helper to remove from parent when removing a key from tree
+
   // Do not change this type to a BufferPoolManager!
   std::shared_ptr<TracedBufferPoolManager> bpm_;
 

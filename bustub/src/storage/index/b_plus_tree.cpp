@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "storage/index/b_plus_tree_debug.h"
 #include "storage/index/generic_key.h"
+#include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_header_page.h"
 #include "storage/page/b_plus_tree_page.h"
 #include "storage/page/page_guard.h"
@@ -149,6 +150,70 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   
 }
 
+
+
+
+FULL_INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::OptimisticInsert(const KeyType &key, const ValueType &value) -> std::optional<bool> {
+  ReadPageGuard header_guard = bpm_->ReadPage(header_page_id_);
+  auto header_pg = header_guard.As<BPlusTreeHeaderPage>();
+  page_id_t root_pg_id = header_pg->root_page_id_;
+  header_guard.Drop();
+
+  if (root_pg_id == INVALID_PAGE_ID) {
+    return std::nullopt; // empty tree needs pessimistic
+  }
+
+  ReadPageGuard curr_guard = bpm_->ReadPage(root_pg_id);
+  auto curr_pg = curr_guard.As<BPlusTreePage>();
+
+  while (!curr_pg->IsLeafPage()) {
+    auto internal = curr_guard.As<InternalPage>();
+    int lo = 1, hi = internal->GetSize();
+    while (lo < hi) {
+      int mid = lo + (hi - lo) / 2;
+      if (comparator_(internal->KeyAt(mid), key) <= 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    page_id_t child_id = internal->ValueAt(lo - 1);
+    curr_guard = bpm_->ReadPage(child_id);
+    curr_pg = curr_guard.As<BPlusTreePage>();
+  }
+
+  page_id_t leaf_id = curr_guard.GetPageId();
+  curr_guard.Drop();
+  WritePageGuard leaf_guard = bpm_->WritePage(leaf_id);
+  auto leaf_pg = leaf_guard.AsMut<LeafPage>();
+
+  if (leaf_pg->GetSize() >= leaf_pg->GetMaxSize() - 1) {
+    return std::nullopt; // leaf will split, need pessimistic
+  }
+
+  int lo = 0, hi = leaf_pg->GetSize();
+  while (lo < hi) {
+    int mid = lo + (hi - lo) / 2;
+    int cmp = comparator_(leaf_pg->KeyAt(mid), key);
+    if (cmp == 0) return false; // duplicate
+    if (cmp < 0) lo = mid + 1;
+    else hi = mid;
+  }
+
+  for (int i = leaf_pg->GetSize(); i > lo; i--) {
+    leaf_pg->SetKeyAt(i, leaf_pg->KeyAt(i - 1));
+    leaf_pg->SetValueAt(i, leaf_pg->ValueAt(i - 1));
+  }
+  leaf_pg->SetKeyAt(lo, key);
+  leaf_pg->SetValueAt(lo, value);
+  leaf_pg->ChangeSizeBy(1);
+  return true;
+}
+
+
+
+
 /*****************************************************************************
  * INSERTION
  *****************************************************************************/
@@ -167,6 +232,11 @@ FULL_INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool {
   //UNIMPLEMENTED("TODO(P2): Add implementation.");
   // Declaration of context instance. Using the Context is not necessary but advised.
+  auto optimistic_result = OptimisticInsert(key, value);
+  if (optimistic_result.has_value()) 
+  {
+    return optimistic_result.value();
+  }
   Context ctx;
   WritePageGuard header_guard = bpm_->WritePage(header_page_id_); // get a write guard on header pg
   auto header_pg = header_guard.AsMut<BPlusTreeHeaderPage>(); // get a pointer to the guard as a headertype obj
@@ -373,6 +443,70 @@ void BPLUSTREE_TYPE::InsertIntoParent(Context &ctx, page_id_t old_id, const KeyT
 }
 
 
+
+
+FULL_INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::OptimisticRemove(const KeyType &key) -> std::optional<bool> {
+  ReadPageGuard header_guard = bpm_->ReadPage(header_page_id_);
+  auto header_pg = header_guard.As<BPlusTreeHeaderPage>();
+  page_id_t root_pg_id = header_pg->root_page_id_;
+  header_guard.Drop();
+
+  if (root_pg_id == INVALID_PAGE_ID) {
+    return true; // empty tree
+  }
+
+  ReadPageGuard curr_guard = bpm_->ReadPage(root_pg_id);
+  auto curr_pg = curr_guard.As<BPlusTreePage>();
+
+  while (!curr_pg->IsLeafPage()) {
+    auto internal = curr_guard.As<InternalPage>();
+    int lo = 1, hi = internal->GetSize();
+    while (lo < hi) {
+      int mid = lo + (hi - lo) / 2;
+      if (comparator_(internal->KeyAt(mid), key) <= 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    page_id_t child_id = internal->ValueAt(lo - 1);
+    curr_guard = bpm_->ReadPage(child_id);
+    curr_pg = curr_guard.As<BPlusTreePage>();
+  }
+
+  page_id_t leaf_id = curr_guard.GetPageId();
+  curr_guard.Drop();
+  WritePageGuard leaf_guard = bpm_->WritePage(leaf_id);
+  auto leaf_pg = leaf_guard.AsMut<LeafPage>();
+
+  if (leaf_pg->GetSize() <= leaf_pg->GetMinSize()) {
+    return std::nullopt; // will underflow, need pessimistic
+  }
+
+  int lo = 0, hi = leaf_pg->GetSize(), mid = 0;
+  while (lo < hi) {
+    mid = lo + (hi - lo) / 2;
+    int cmp = comparator_(leaf_pg->KeyAt(mid), key);
+    if (cmp == 0) {
+      for (int i = mid; i < leaf_pg->GetSize() - 1; i++) {
+        leaf_pg->SetKeyAt(i, leaf_pg->KeyAt(i + 1));
+        leaf_pg->SetValueAt(i, leaf_pg->ValueAt(i + 1));
+      }
+      leaf_pg->ChangeSizeBy(-1);
+      return true;
+    }
+    if (cmp < 0) lo = mid + 1;
+    else hi = mid;
+  }
+  return true; // key not found
+}
+
+
+
+
+
+
 /*****************************************************************************
  * REMOVE
  *****************************************************************************/
@@ -389,6 +523,11 @@ void BPLUSTREE_TYPE::InsertIntoParent(Context &ctx, page_id_t old_id, const KeyT
 FULL_INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key) {
   // Declaration of context instance.
+  auto optimistic_result = OptimisticRemove(key);
+  if (optimistic_result.has_value())
+  {
+    return;
+  }
   Context ctx;
   //UNIMPLEMENTED("TODO(P2): Add implementation.");
   WritePageGuard header_guard = bpm_->WritePage(header_page_id_); // get a write guard on header pg
@@ -804,7 +943,29 @@ void BPLUSTREE_TYPE::RemoveFromParent(Context &ctx, page_id_t node_id,WritePageG
  * @return : index iterator
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { UNIMPLEMENTED("TODO(P2): Add implementation."); }
+auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { 
+  //UNIMPLEMENTED("TODO(P2): Add implementation."); 
+  ReadPageGuard header_guard = bpm_->ReadPage(header_page_id_);
+  auto header = header_guard.As<BPlusTreeHeaderPage>();
+  int root_id = header->root_page_id_;
+
+  if(root_id == INVALID_PAGE_ID)
+  {
+    return INDEXITERATOR_TYPE();
+  }
+
+
+  ReadPageGuard curr_guard = bpm_->ReadPage(root_id);
+  auto curr_page = curr_guard.As<BPlusTreePage>();
+  while(!curr_page->IsLeafPage())
+  {
+    auto internal = curr_guard.As<InternalPage>();
+    page_id_t child_id = internal->ValueAt(0);
+      curr_guard = bpm_->ReadPage(child_id);
+      curr_page = curr_guard.As<BPlusTreePage>();
+  }
+  return INDEXITERATOR_TYPE(bpm_,std::move(curr_guard),0);
+}
 
 /**
  * @brief Input parameter is low key, find the leaf page that contains the input key
@@ -812,7 +973,77 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { UNIMPLEMENTED("TODO(P2): Ad
  * @return : index iterator
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { UNIMPLEMENTED("TODO(P2): Add implementation."); }
+auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { 
+  //UNIMPLEMENTED("TODO(P2): Add implementation."); 
+  ReadPageGuard header_guard = bpm_->ReadPage(header_page_id_);
+  auto header_pg = header_guard.As<BPlusTreeHeaderPage>();
+  auto header_root_id = header_pg->root_page_id_;
+  header_guard.Drop();
+  if(header_root_id == INVALID_PAGE_ID) // check if tree even exists
+  {
+    return INDEXITERATOR_TYPE();
+  }
+  
+  ReadPageGuard curr_guard = bpm_->ReadPage(header_root_id);
+  auto curr_page = curr_guard.As<BPlusTreePage>();
+  while(!curr_page->IsLeafPage())
+  {
+    auto internal = curr_guard.As<InternalPage>();
+   
+      int hi = curr_page->GetSize(),lo = 1;
+      while(lo<hi)
+      {
+        
+        int mid = lo + (hi-lo)/2;
+        auto comp = comparator_(internal->KeyAt(mid),key);
+        if(comp > 0) // if key is smaller than the key at current mid
+        {
+          hi = mid;
+        }
+        else  // if key is smaller than or equal to the key at current mid
+        {
+          lo = mid+1;
+          
+        }
+        
+      }
+      page_id_t child_id = internal->ValueAt(lo -1);
+      curr_guard = bpm_->ReadPage(child_id);
+      curr_page = curr_guard.As<BPlusTreePage>();
+      
+    }
+      auto leaf_pg = curr_guard.As<LeafPage>();
+      int hi = curr_page->GetSize();
+      int lo = 0;
+      while(lo<hi)
+      {
+        int mid = lo + (hi-lo)/2; 
+        auto comp = comparator_(leaf_pg->KeyAt(mid),key);
+        if(comp > 0) // if key is smaller than the key at current mid
+        {
+          hi = mid;
+        }
+        else if (comp<0) // if key is smaller than or equal to the key at current mid
+        {
+          lo = mid+1;
+          
+        }
+        else
+        {
+          auto tombstones = leaf_pg->GetTombstones();
+          for(auto &tombs : tombstones)
+          {
+            if(comparator_(tombs,key) == 0)
+            {
+              return INDEXITERATOR_TYPE(); // the key has been logically deleted
+            }
+          }
+          return INDEXITERATOR_TYPE(bpm_,std::move(curr_guard),lo);
+          
+        }
+      }
+      return INDEXITERATOR_TYPE();
+}
 
 /**
  * @brief Input parameter is void, construct an index iterator representing the end
@@ -820,7 +1051,10 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { UNIMPLEME
  * @return : index iterator
  */
 FULL_INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { UNIMPLEMENTED("TODO(P2): Add implementation."); }
+auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { 
+  //UNIMPLEMENTED("TODO(P2): Add implementation."); 
+  return INDEXITERATOR_TYPE();
+}
 
 /**
  * @return Page id of the root of this tree
